@@ -1,0 +1,33 @@
+.container {
+  background-color: var(--color-white);
+  display: flex;
+}
+
+.siderContainer {
+  background-color: var(--bg-menu);
+}
+
+.headerRight {
+  display: flex;
+  justify-content: space-between;
+  padding: 0;
+}
+
+.profile {
+  margin-right: 16px;
+  display: flex;
+  align-items: center;
+}
+
+.profile img {
+  border-radius: 10px;
+}
+
+.searchContainer {
+  display: flex;
+  align-items: center;
+}
+
+.search {
+  margin-left: 30px;
+}
