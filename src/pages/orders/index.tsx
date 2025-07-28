@@ -1,206 +1,233 @@
-import React from 'react';
-import {
-  Table,
-  Tag,
-  Button,
-  Input,
-  Space,
-  Select,
-  Avatar,
-  Dropdown,
-  Menu,
-} from 'antd';
-import { DownloadOutlined, MoreOutlined } from '@ant-design/icons';
+import React, { useEffect, useState } from 'react';
+import { Table, Input, Space, Select, Button, Modal } from 'antd';
+import { EyeOutlined } from '@ant-design/icons';
+import { GetServerSideProps, GetServerSidePropsContext } from 'next';
+import axios from 'axios';
+import { getAllOrder, Order } from '@/redux/slice/order';
+import { useRouter } from 'next/router';
+import { useAppDispatch, useAppSelector } from '@/redux/hook';
+import { goToWithSearchOrder } from '@/utils/router-helper';
+import { ColumnsType } from 'antd/es/table';
 import StatusTag from '@/components/status-tag';
+import Detail from '@/components/detail-data';
 
 const { Option } = Select;
 
-interface Order {
-  key: string;
-  orderId: string;
-  date: string;
-  customer: {
-    name: string;
-    email: string;
-    avatar: string;
-  };
-  payment: 'Paid' | 'Failed' | 'Cancelled' | 'Pending';
-  status: 'Đã giao' | 'Sẵn sàng lấy' | 'Đang giao' | 'Đã gửi đi';
-
-  method: string;
-}
-
-const paymentColors = {
-  Paid: 'green',
-  Failed: 'red',
-  Cancelled: 'default',
-  Pending: 'orange',
+const statusColorsStatus = {
+  'Chờ thanh toán': 'orange',
+  'Đã thanh toán': 'green',
+  'Đã hủy': 'red',
 };
 
-const statusColors = {
-  'Đã giao': 'green',
-  'Sẵn sàng lấy': 'cyan',
-  'Đang giao': 'purple',
-  'Đã gửi đi': 'orange',
+const statusColorsType = {
+  'Chưa xác định': 'gray',
+  'Tiền mặt': 'blue',
+  'Chuyển khoản ngân hàng': 'purple',
+  'Ví điện tử': 'cyan',
 };
 
-const data: Order[] = [
-  {
-    key: '1',
-    orderId: '#5434',
-    date: 'Thứ Hai, 16/05/2022, 2:11 sáng',
-    customer: {
-      name: 'Gabrielle Feyer',
-      email: 'gfeyer@onyu.edu',
-      avatar: 'https://randomuser.me/api/portraits/women/1.jpg',
-    },
-    payment: 'Paid',
-    status: 'Đã giao',
-    method: 'PayPal',
-  },
-  {
-    key: '2',
-    orderId: '#6745',
-    date: 'Thứ Tư, 03/05/2023, 7:26 tối',
-    customer: {
-      name: 'Jackson Deignan',
-      email: 'jdeignan@dell.com',
-      avatar: 'https://randomuser.me/api/portraits/men/2.jpg',
-    },
-    payment: 'Cancelled',
-    status: 'Đã giao',
-    method: 'PayPal',
-  },
-  {
-    key: '3',
-    orderId: '#6087',
-    date: 'Thứ Năm, 15/12/2022, 6:51 tối',
-    customer: {
-      name: 'Tanya Crum',
-      email: 'tcrum2@nyandex.ru',
-      avatar: 'https://randomuser.me/api/portraits/women/3.jpg',
-    },
-    payment: 'Failed',
-    status: 'Sẵn sàng lấy',
-    method: 'Visa',
-  },
-];
+export default function OrdersPage({ data }: { data: Order[] }) {
+  const [isOpen, setIsOpen] = useState(false);
+  const [dataDetail, setDataDetail] = useState({});
 
-export default function OrdersPage() {
-  const columns = [
+  const router = useRouter();
+  const { search, page, size, status, type } = router.query;
+  const searchFilter = Array.isArray(search) ? search[0] : search ?? '';
+  const statusFilter = Array.isArray(status) ? status[0] : status ?? '';
+  const typeFilter = Array.isArray(type) ? type[0] : type ?? '';
+
+  const dataOrder = useAppSelector((state) => state.orders.dataRender);
+  const dispatch = useAppDispatch();
+
+  useEffect(() => {
+    dispatch(
+      getAllOrder({
+        data: data,
+        search: searchFilter,
+        type: typeFilter,
+        status: statusFilter,
+      }),
+    );
+  }, [dispatch, data, searchFilter, typeFilter, statusFilter]);
+
+  const columns: ColumnsType<Order> = [
     {
-      title: 'MÃ ĐƠN',
-      dataIndex: 'orderId',
-      render: (text: string) => <a style={{ color: '#1677ff' }}>{text}</a>,
+      title: 'Họ tên khách hàng',
+      dataIndex: 'full_name',
+      render: (_, record) => <span>{record.customer?.full_name}</span>,
     },
     {
-      title: 'NGÀY ĐẶT',
-      dataIndex: 'date',
-    },
-    {
-      title: 'KHÁCH HÀNG',
-      dataIndex: 'customer',
-      render: (customer: Order['customer']) => (
-        <Space>
-          <Avatar src={customer.avatar} />
-          <div>
-            <div>{customer.name}</div>
-            <div style={{ color: '#999', fontSize: 12 }}>{customer.email}</div>
-          </div>
-        </Space>
-      ),
-    },
-    {
-      title: 'THANH TOÁN',
-      dataIndex: 'payment',
-      render: (payment: Order['payment']) => (
+      title: 'Số điện thoại',
+      dataIndex: 'phone',
+      render: (_, record) => (
         <span>
-          <span style={{ color: paymentColors[payment], marginRight: 8 }}>
-            ●
-          </span>
-          {
-            {
-              Paid: 'Đã thanh toán',
-              Failed: 'Thất bại',
-              Cancelled: 'Đã hủy',
-              Pending: 'Đang chờ',
-            }[payment]
-          }
+          {record.customer?.phone ? record.customer?.phone : 'Chưa cập nhật'}
         </span>
       ),
     },
     {
-      title: 'TRẠNG THÁI',
+      title: 'Tổng tiền hóa đơn',
+      dataIndex: 'total_amount',
+    },
+    {
+      title: 'Trạng thái',
       dataIndex: 'status',
-      render: (status: Order['status']) => (
+      render: (_, record) => (
         <StatusTag
-          status={status}
-          colorMap={statusColors}
-          defaultColor="default"
+          status={record.status}
+          colorMap={statusColorsStatus}
+          defaultColor="white"
         />
       ),
     },
     {
-      title: 'PHƯƠNG THỨC',
-      dataIndex: 'method',
-      render: (text: string) => <span>💳 {text}</span>,
+      title: 'Phương thức',
+      dataIndex: 'payment_method',
+      render: (_, record) => (
+        <StatusTag
+          status={record.payment_method}
+          colorMap={statusColorsType}
+          defaultColor="white"
+        />
+      ),
     },
     {
-      title: 'THAO TÁC',
-      render: () => (
-        <Dropdown
-          overlay={
-            <Menu>
-              <Menu.Item key="1">Xem chi tiết</Menu.Item>
-              <Menu.Item key="2">Hủy đơn</Menu.Item>
-            </Menu>
-          }>
-          <Button icon={<MoreOutlined />} />
-        </Dropdown>
+      title: 'Hành động',
+      render: (_, record) => (
+        <Space>
+          <Button
+            icon={<EyeOutlined />}
+            onClick={() => {
+              setDataDetail(record);
+              setIsOpen(true);
+            }}
+          />
+        </Space>
       ),
     },
   ];
 
   return (
     <div style={{ padding: 24 }}>
-      <div style={{ display: 'flex', gap: 24, marginBottom: 24 }}>
-        <div>
-          <h3>56</h3>
-          <div>Đang chờ thanh toán</div>
-        </div>
-        <div>
-          <h3>12,689</h3>
-          <div>Đã hoàn thành</div>
-        </div>
-        <div>
-          <h3>124</h3>
-          <div>Đã hoàn tiền</div>
-        </div>
-        <div>
-          <h3>32</h3>
-          <div>Thất bại</div>
-        </div>
-      </div>
-
       <Space style={{ marginBottom: 16 }} wrap>
-        <Input.Search
-          placeholder="Tìm kiếm đơn hàng"
-          style={{ width: 200 }}
-          allowClear
-        />
-        <Select defaultValue="10">
-          <Option value="10">Hiển thị 10</Option>
-          <Option value="20">Hiển thị 20</Option>
+        <span>Trình diễn</span>
+        <Select
+          defaultValue="10"
+          onChange={(value) => {
+            goToWithSearchOrder(
+              router,
+              searchFilter,
+              1,
+              Number(value),
+              statusFilter,
+              typeFilter,
+            );
+          }}>
+          <Select.Option value="10">10</Select.Option>
+          <Select.Option value="20">20</Select.Option>
+          <Select.Option value="50">50</Select.Option>
         </Select>
-        <Button icon={<DownloadOutlined />}>Xuất file</Button>
+        <Input.Search
+          placeholder="Tên hoặc số điện thoại"
+          allowClear
+          enterButton
+          onSearch={(value) =>
+            goToWithSearchOrder(router, value, 1, 10, statusFilter, typeFilter)
+          }
+        />
+
+        <Select
+          allowClear
+          className="select-option"
+          placeholder="Chọn trạng thái"
+          style={{ width: 160 }}
+          onChange={(value) =>
+            goToWithSearchOrder(
+              router,
+              searchFilter,
+              1,
+              Number(size),
+              value,
+              typeFilter,
+            )
+          }>
+          <Option value="all">Tất cả</Option>
+          <Option value="Chờ thanh toán">Chờ thanh toán</Option>
+          <Option value="Đã thanh toán">Đã thanh toán</Option>
+          <Option value="Đã hủy">Đã hủy</Option>
+        </Select>
+
+        <Select
+          allowClear
+          className="select-option"
+          placeholder="Chọn phương thức"
+          style={{ width: 160 }}
+          onChange={(value) =>
+            goToWithSearchOrder(
+              router,
+              searchFilter,
+              1,
+              Number(size),
+              statusFilter,
+              value,
+            )
+          }>
+          <Option value="all">Tất cả</Option>
+          <Option value="Chưa xác định">Chưa xác định</Option>
+          <Option value="Tiền mặt">Tiền mặt</Option>
+          <Option value="Chuyển khoản ngân hàng">Chuyển khoản ngân hàng</Option>
+          <Option value="Ví điện tử">Ví điện tử</Option>
+        </Select>
+
+        <Modal
+          title={`Thông tin chi tiết đơn hàng`}
+          open={isOpen}
+          onCancel={() => {
+            setIsOpen(false);
+          }}
+          footer={null}
+          width={600}>
+          <Detail data={dataDetail} type="orders" />
+        </Modal>
       </Space>
 
       <Table
         columns={columns}
-        dataSource={data}
-        rowSelection={{}}
-        pagination={{ pageSize: 10 }}
+        dataSource={dataOrder}
+        pagination={{
+          pageSize: Number(size) || 10,
+          current: Number(page) || 1,
+          showSizeChanger: false,
+          onChange: (page: number, pageSize: number) => {
+            const searchFilter = Array.isArray(search)
+              ? search[0]
+              : search ?? '';
+            const sizeFilter = Number(size) || 10;
+            goToWithSearchOrder(
+              router,
+              searchFilter,
+              page,
+              Number(sizeFilter),
+              statusFilter,
+              typeFilter,
+            );
+          },
+        }}
       />
     </div>
   );
 }
+
+export const getServerSideProps: GetServerSideProps = async (
+  ctx: GetServerSidePropsContext,
+) => {
+  const res = await axios.get(
+    `${process.env.NEXT_PUBLIC_API_BACKEND_URL}/orders`,
+  );
+
+  return {
+    props: {
+      data: res.data,
+    },
+  };
+};

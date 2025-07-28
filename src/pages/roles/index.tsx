@@ -1,114 +1,201 @@
-import React, { useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import {
-  Card,
-  Col,
   Row,
   Table,
-  Tag,
   Space,
   Button,
   Popconfirm,
   Input,
-  Select,
   Modal,
+  Form,
+  message,
+  Select,
 } from 'antd';
 import {
   EditOutlined,
   DeleteOutlined,
-  MoreOutlined,
   UserAddOutlined,
+  EyeOutlined,
 } from '@ant-design/icons';
-import StatusTag from '@/components/status-tag';
 import RoleForm from '@/components/feature-role';
+import { GetServerSideProps, GetServerSidePropsContext } from 'next';
+import axios from 'axios';
+import { Permission } from '@/redux/slice/permission';
+import { UserContext } from '@/context/userContext';
+import { defineAbilityFor } from '@/casl/ability';
+import { Can } from '@/casl/Can';
+import Detail from '@/components/detail-data';
+import { errors, success } from '@/components/success-error-info';
+import { useAppDispatch, useAppSelector } from '@/redux/hook';
+import {
+  createRole,
+  deleteRole,
+  getAllRole,
+  updateRole,
+} from '@/redux/slice/role';
+import { useRouter } from 'next/router';
+import { goToWithSearch } from '@/utils/router-helper';
 
-const { Search } = Input;
-
-interface User {
-  key: string;
-  name: string;
-  role: string;
-  plan: string;
-  payment: string;
-  status: 'Hoạt Động' | 'Chưa Gửi Quyết' | 'Không Hoạt Động' | 'Tình Cờ';
-}
-
-const usersData: User[] = [
-  {
-    key: '1',
-    name: 'Galen Stichy',
-    role: 'Biên Tập Viên',
-    plan: 'Doanh Nghiệp',
-    payment: 'Tự Động Ghi Nợ',
-    status: 'Không Hoạt Động',
-  },
-  {
-    key: '2',
-    name: 'Halsey Redmore',
-    role: 'Tác Giả',
-    plan: 'Đội',
-    payment: 'Tự Động Ghi Nợ',
-    status: 'Chưa Gửi Quyết',
-  },
-  {
-    key: '3',
-    name: 'Murjay Sineky',
-    role: 'Người Bảo Trì',
-    plan: 'Doanh Nghiệp',
-    payment: 'Tự Động Ghi Nợ',
-    status: 'Tình Cờ',
-  },
-  // ... add more rows
-];
-
-export default function UserManagementPage() {
-  const [selectedRowKeys, setSelectedRowKeys] = useState<React.Key[]>([]);
+export default function UserManagementPage({
+  data,
+  dataPermissions,
+}: {
+  data: any[];
+  dataPermissions: Permission[];
+}) {
   const [isModalVisible, setIsModalVisible] = useState(false);
+  const [dataDetail, setDataDetail] = useState({});
+  const [isOpen, setIsOpen] = useState(false);
+  const [isEdit, setIsEdit] = useState(false);
+  const [isLoading, setIsLoading] = useState(false);
+  const dispatch = useAppDispatch();
+
+  const [form] = Form.useForm();
+  const [messageApi, contextHolder] = message.useMessage();
+  const { user } = React.useContext(UserContext);
+
+  const dataRoles = useAppSelector((state) => state.roles.dataRender);
+  const router = useRouter();
+  const { search, page, size } = router.query;
+
+  const ability = useMemo(
+    () => defineAbilityFor(user.userRole),
+    [user.userRole],
+  );
+
+  useEffect(() => {
+    dispatch(
+      getAllRole({
+        data: data,
+        search: search,
+      }),
+    );
+  }, [dispatch, data, search]);
+
+  const handleSubmitCreate = async (dataCreate: any) => {
+    try {
+      setIsLoading(true);
+      const res = await axios.post(
+        `${process.env.NEXT_PUBLIC_API_BACKEND_URL}/roles/create`,
+        dataCreate,
+        {
+          withCredentials: true,
+        },
+      );
+      await dispatch(createRole(res.data));
+      setIsLoading(false);
+      success('Thêm vai trò mới thành công.', messageApi);
+      setIsModalVisible(false);
+      form.resetFields();
+      setIsEdit(false);
+    } catch (error: any) {
+      errors(error.response.data.message, messageApi);
+      setIsLoading(false);
+      return;
+    }
+  };
+
+  const handleSubmitEdit = async (dataCreate: any) => {
+    try {
+      setIsLoading(true);
+      const res = await axios.put(
+        `${process.env.NEXT_PUBLIC_API_BACKEND_URL}/roles/update`,
+        dataCreate,
+        {
+          withCredentials: true,
+        },
+      );
+      dispatch(updateRole(res.data));
+      setIsLoading(false);
+      success('Cập nhật vai trò thành công.', messageApi);
+      setIsModalVisible(false);
+      setIsEdit(false);
+      form.resetFields();
+    } catch (error: any) {
+      errors(error.response.data.message, messageApi);
+      setIsLoading(false);
+      return;
+    }
+  };
+
+  const handleDeleteRole = async (roleId: number) => {
+    try {
+      setIsLoading(true);
+      const res = await axios.put(
+        `${process.env.NEXT_PUBLIC_API_BACKEND_URL}/roles/delete`,
+        { id: roleId },
+        {
+          withCredentials: true,
+        },
+      );
+      dispatch(deleteRole(roleId));
+      success('Xóa thành công.', messageApi);
+    } catch (error: any) {
+      errors(error.response.data.message, messageApi);
+      return;
+    }
+  };
 
   const columns = [
     {
-      title: 'Người Sử Dụng',
+      title: 'Tên vai trò',
       dataIndex: 'name',
+      width: '20%',
     },
     {
-      title: 'Vai Trò',
-      dataIndex: 'role',
+      title: 'Mô tả',
+      dataIndex: 'description',
+      width: '50%',
     },
     {
-      title: 'Kế Hoạch',
-      dataIndex: 'plan',
-    },
-    {
-      title: 'Thanh Toán',
-      dataIndex: 'payment',
-    },
-    {
-      title: 'Trạng Thái',
-      dataIndex: 'status',
-      render: (status: User['status']) => {
-        const colorMap = {
-          'Hoạt Động': 'green',
-          'Chưa Gửi Quyết': 'orange',
-          'Không Hoạt Động': 'default',
-          'Tình Cờ': 'blue',
-        };
-        return (
-          <StatusTag
-            status={status}
-            colorMap={colorMap}
-            defaultColor="default"
-          />
-        );
-      },
+      title: 'Tổng số quyền',
+      dataIndex: 'rolePermissions',
+      render: (_: any, record: any) => (
+        <span style={{ textAlign: 'center' }}>
+          {record.rolePermissions?.length || 0} quyền
+        </span>
+      ),
+      width: '20%',
     },
     {
       title: 'Hành Động',
-      render: () => (
+      render: (value: any, record: any) => (
         <Space>
-          <Button icon={<EditOutlined />} />
-          <Popconfirm title="Xác nhận xoá?" onConfirm={() => {}}>
-            <Button danger icon={<DeleteOutlined />} />
-          </Popconfirm>
-          <Button icon={<MoreOutlined />} />
+          <Button
+            icon={<EyeOutlined />}
+            onClick={() => {
+              setDataDetail(record);
+              setIsOpen(true);
+            }}
+          />
+          {record['allow_delete'] && (
+            <>
+              <Can I="edit" a="roles" ability={ability}>
+                <Button
+                  icon={<EditOutlined />}
+                  onClick={() => {
+                    setIsEdit(true);
+                    form.setFieldsValue({
+                      name: record.name,
+                      description: record.description,
+                      id: record.id,
+                      permission_id: record.rolePermissions.map(
+                        (item: any) => item.permission_id,
+                      ),
+                    });
+                    setIsModalVisible(true);
+                  }}
+                />
+              </Can>
+              <Can I="delete" a="roles" ability={ability}>
+                <Popconfirm
+                  title="Xác nhận xoá?"
+                  onConfirm={() => handleDeleteRole(record.id)}>
+                  <Button danger icon={<DeleteOutlined />} />
+                </Popconfirm>
+              </Can>
+            </>
+          )}
         </Space>
       ),
     },
@@ -116,62 +203,107 @@ export default function UserManagementPage() {
 
   return (
     <div style={{ padding: 24 }}>
-      {/* Phần thống kê vai trò */}
-      <Row gutter={[16, 16]} style={{ marginBottom: 32 }}>
-        {[
-          'Người quản lý',
-          'Biên tập viên',
-          'Người sử dụng',
-          'Ủng hộ',
-          'Hạn chế',
-        ].map((title, i) => (
-          <Col key={i} xs={24} sm={12} md={8} lg={6}>
-            <Card title={title} extra={`+${i + 3} người`}>
-              <div>Chỉnh sửa vai trò</div>
-            </Card>
-          </Col>
-        ))}
-        <Col xs={24} sm={12} md={8} lg={6}>
-          <Card>
+      {contextHolder}
+      <Row gutter={[24, 24]} style={{ marginBottom: 32 }}>
+        <Space>
+          <Can I="create" a="roles" ability={ability}>
             <Button
               type="primary"
               icon={<UserAddOutlined />}
               onClick={() => setIsModalVisible(true)}>
               Thêm vai trò mới
             </Button>
-            <Modal
-              title="Thêm vai trò mới"
-              open={isModalVisible}
-              onCancel={() => setIsModalVisible(false)}
-              footer={null}
-              width={800} // tùy chỉnh chiều rộng
-            >
-              <RoleForm onSuccess={() => setIsModalVisible(false)} />
-            </Modal>
-          </Card>
-        </Col>
+          </Can>
+          <span>Trình diễn</span>
+          <Select
+            defaultValue="10"
+            onChange={(value) => {
+              const searchFilter = Array.isArray(search)
+                ? search[0]
+                : search ?? '';
+              goToWithSearch(router, searchFilter, 1, Number(value));
+            }}>
+            <Select.Option value="10">10</Select.Option>
+            <Select.Option value="20">20</Select.Option>
+            <Select.Option value="50">50</Select.Option>
+          </Select>
+          <Input.Search
+            placeholder="Tìm kiếm tên vai trò"
+            allowClear
+            enterButton
+            onSearch={(value) => goToWithSearch(router, value, 1, 10)}
+          />
+          <Modal
+            title="Thêm vai trò mới"
+            open={isModalVisible}
+            onCancel={() => {
+              setIsModalVisible(false);
+              setIsEdit(false);
+              form.resetFields();
+            }}
+            footer={null}
+            width={800}>
+            <RoleForm
+              onSuccess={() => {
+                setIsModalVisible(false);
+                setIsEdit(false);
+                form.resetFields();
+              }}
+              form={form}
+              isEdit={isEdit}
+              isLoading={isLoading}
+              handleSubmitCreate={handleSubmitCreate}
+              handleEdit={handleSubmitEdit}
+              dataPermissions={dataPermissions}
+            />
+          </Modal>
+
+          <Modal
+            title={`Thông tin chi tiết vai trò`}
+            open={isOpen}
+            onCancel={() => {
+              setIsOpen(false);
+            }}
+            footer={null}
+            width={600}>
+            <Detail data={dataDetail} type="roles" />
+          </Modal>
+        </Space>
       </Row>
 
-      {/* Bộ lọc & bảng */}
-      <Space style={{ marginBottom: 16 }}>
-        <Select defaultValue="Chọn vai trò" style={{ width: 160 }}>
-          <Select.Option value="all">Tất cả</Select.Option>
-        </Select>
-        <Select defaultValue="Chọn kế hoạch" style={{ width: 160 }}>
-          <Select.Option value="all">Tất cả</Select.Option>
-        </Select>
-        <Search placeholder="Tìm kiếm người dùng" />
-      </Space>
-
       <Table
-        rowSelection={{
-          selectedRowKeys,
-          onChange: setSelectedRowKeys,
-        }}
         columns={columns}
-        dataSource={usersData}
-        pagination={{ pageSize: 10 }}
+        dataSource={dataRoles}
+        pagination={{
+          pageSize: Number(size) || 10,
+          current: Number(page) || 1,
+          showSizeChanger: false,
+          onChange: (page: number, pageSize: number) => {
+            const searchFilter = Array.isArray(search)
+              ? search[0]
+              : search ?? '';
+            const sizeFilter = Number(size) || 10;
+            goToWithSearch(router, searchFilter, page, sizeFilter);
+          },
+        }}
       />
     </div>
   );
 }
+
+export const getServerSideProps: GetServerSideProps = async (
+  ctx: GetServerSidePropsContext,
+) => {
+  const res = await axios.get(
+    `${process.env.NEXT_PUBLIC_API_BACKEND_URL}/roles`,
+  );
+  const resPermission = await axios.get(
+    `${process.env.NEXT_PUBLIC_API_BACKEND_URL}/permissions`,
+  );
+  return {
+    props: {
+      data: res.data,
+      dataPermissions: resPermission.data,
+    },
+  };
+};

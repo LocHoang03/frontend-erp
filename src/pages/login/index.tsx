@@ -1,20 +1,83 @@
 import styles from '@/styles/auth/login/login.module.css';
 import loginImage from '@/assets/image/login.jpg';
 import Head from 'next/head';
-import Link from 'next/link';
-import { Button, Form, Input } from 'antd';
+import { Button, Form, Input, message } from 'antd';
 import type { FormProps } from 'antd';
+import { errors, success } from '@/components/success-error-info';
+import React, { useEffect, useState } from 'react';
+import axios from 'axios';
+import { GetServerSideProps } from 'next';
+import { useRouter } from 'next/router';
+import { UserContext } from '@/context/userContext';
 
 export default function Login() {
+  const [isLoading, setIsLoading] = useState(false);
+  const router = useRouter();
   const [form] = Form.useForm();
   type FieldType = {
     username?: string;
     password?: string;
-    remember?: string;
   };
 
-  const onFinish: FormProps<FieldType>['onFinish'] = (values) => {
-    console.log('Success:', values);
+  const [hasMounted, setHasMounted] = useState(false);
+  const [route, setRoute] = useState<string[]>([
+    'dashboard',
+    'manage-accounts',
+    'permissions',
+    'roles',
+    'employees',
+    'departments',
+    'positions',
+    'warehouses',
+    'warehouses-transfers',
+    'products',
+    'category-products',
+    'attendances',
+    'salary',
+    'projects',
+    'tasks',
+    'partners',
+    'warehouse-transactions',
+    'orders',
+    'customers',
+  ]);
+
+  const { setUser } = React.useContext(UserContext);
+
+  useEffect(() => {
+    setHasMounted(true);
+  }, []);
+
+  const [messageApi, contextHolder] = message.useMessage();
+
+  const onFinish: FormProps<FieldType>['onFinish'] = async (values) => {
+    try {
+      setIsLoading(true);
+      const res = await axios.post(
+        `${process.env.NEXT_PUBLIC_API_BACKEND_URL}/users/login`,
+        values,
+        { withCredentials: true },
+      );
+      if (res.data.success) {
+        setUser(res.data.dataUser);
+        success('Đăng nhập thành công', messageApi);
+        setTimeout(() => {
+          const redirectRoute = route.find((r) =>
+            res.data.dataUser.userRole.some((perm: string) => perm.includes(r)),
+          );
+
+          if (redirectRoute) {
+            router.push(
+              `/${redirectRoute !== 'dashboard' ? redirectRoute : ''}`,
+            );
+          }
+        }, 500);
+      }
+    } catch (error: any) {
+      errors(error.response.data.message, messageApi);
+      setIsLoading(false);
+      return;
+    }
   };
 
   const onFinishFailed: FormProps<FieldType>['onFinishFailed'] = (
@@ -23,8 +86,10 @@ export default function Login() {
     console.log('Failed:', errorInfo);
   };
 
+  if (!hasMounted) return null;
   return (
     <>
+      {contextHolder}
       <Head>
         <title>Login</title>
         <meta name="description" content="Login with Daily Log" />
@@ -42,18 +107,8 @@ export default function Login() {
           }}>
           <div className={`${styles.containerOpacity}`}></div>
           <div className={`${styles.formContainer}`}>
-            <h2>ĐĂNG NHẬP</h2>
-            {/* <form className={`${styles.form}`}>
-              <div>
-                <input type="text" placeholder="Nhập tên tài khoản" />
-              </div>
-              <div>
-                <input type="password" placeholder="Nhập mật khẩu" />
-              </div>
-              <div className={`${styles.DivButtonLogin}`}>
-                <button>Đăng nhập</button>
-              </div>
-            </form> */}
+            <h2>CHÀO MỪNG TRỞ LẠI</h2>
+            <h3>ĐĂNG NHẬP</h3>
             <Form
               name="basic"
               style={{ maxWidth: '100%', width: '100%' }}
@@ -86,19 +141,38 @@ export default function Login() {
 
               <Form.Item label={null}>
                 <div className={`${styles.DivButtonLogin}`}>
-                  <button>Đăng nhập</button>
+                  <Button htmlType="submit" loading={isLoading}>
+                    Đăng nhập
+                  </Button>
                 </div>
               </Form.Item>
             </Form>
-            <div className={`${styles.DivButtonSignup}`}>
-              Bạn là thành viên mới?{' '}
-              <Link href={'/signup'} className={styles.link}>
-                Đăng ký
-              </Link>
-            </div>
           </div>
         </div>
       </main>
     </>
   );
 }
+export const getServerSideProps: GetServerSideProps = async (ctx) => {
+  const cookie = ctx.req.headers.cookie || '';
+
+  const res = await axios.get(
+    `${process.env.NEXT_PUBLIC_API_BACKEND_URL}/users/whoami`,
+    {
+      headers: {
+        Cookie: cookie,
+      },
+      withCredentials: true,
+    },
+  );
+  if (res.data.isLogin) {
+    return {
+      redirect: {
+        destination: '/',
+        permanent: false,
+      },
+    };
+  }
+
+  return { props: {} };
+};

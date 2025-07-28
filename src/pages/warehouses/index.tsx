@@ -1,126 +1,180 @@
-import React, { useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import {
   Table,
-  Tag,
   Button,
   Input,
   Select,
   Space,
-  Dropdown,
-  Menu,
-  Row,
-  Col,
-  Card,
+  Form,
+  message,
+  Modal,
+  Popconfirm,
 } from 'antd';
 import {
   EditOutlined,
-  MoreOutlined,
   PlusOutlined,
   DownloadOutlined,
+  EyeOutlined,
+  DeleteOutlined,
 } from '@ant-design/icons';
-import StatusTag from '@/components/status-tag';
+import { GetServerSideProps, GetServerSidePropsContext } from 'next';
+import axios from 'axios';
+import {
+  createWarehouse,
+  deleteWarehouse,
+  getAllWarehouse,
+  updateWarehouse,
+  Warehouse,
+} from '@/redux/slice/warehouse';
+import { useAppDispatch, useAppSelector } from '@/redux/hook';
+import { errors, success } from '@/components/success-error-info';
+import WarehouseForm from '@/components/warehouse-form';
+import { defineAbilityFor } from '@/casl/ability';
+import { UserContext } from '@/context/userContext';
+import { Can } from '@/casl/Can';
+import Detail from '@/components/detail-data';
+import { useRouter } from 'next/router';
+import { goToWithSearch } from '@/utils/router-helper';
 
 const { Option } = Select;
 const { Search } = Input;
 
-interface InventoryItem {
-  key: string;
-  name: string;
-  category: string;
-  code: string;
-  quantity: number;
-  location: string;
-  status: 'Đang lưu kho' | 'Đã xuất' | 'Hư hỏng';
-}
+export default function InventoryPage({ data }: { data: Warehouse[] }) {
+  const [isModalVisible, setIsModalVisible] = useState(false);
+  const [isLoading, setIsLoading] = useState(false);
+  const [isEdit, setIsEdit] = useState(false);
+  const [dataDetail, setDataDetail] = useState({});
+  const [isOpen, setIsOpen] = useState(false);
+  const router = useRouter();
+  const { search, page, size } = router.query;
 
-const data: InventoryItem[] = [
-  {
-    key: '1',
-    name: 'iPhone 14 Pro',
-    category: 'Điện tử',
-    code: 'KHO-001',
-    quantity: 150,
-    location: 'Kho A1',
-    status: 'Đang lưu kho',
-  },
-  {
-    key: '2',
-    name: 'Đồng hồ thông minh Apple',
-    category: 'Phụ kiện',
-    code: 'KHO-002',
-    quantity: 72,
-    location: 'Kho A2',
-    status: 'Đã xuất',
-  },
-  {
-    key: '3',
-    name: 'Bàn làm việc gỗ sồi',
-    category: 'Nội thất',
-    code: 'KHO-003',
-    quantity: 20,
-    location: 'Kho B1',
-    status: 'Hư hỏng',
-  },
-];
+  const dispatch = useAppDispatch();
 
-const statusColorMap = {
-  'Đang lưu kho': 'blue',
-  'Đã xuất': 'green',
-  'Hư hỏng': 'red',
-};
+  const [form] = Form.useForm();
 
-export default function InventoryPage() {
-  const [selectedRowKeys, setSelectedRowKeys] = useState<React.Key[]>([]);
+  const [messageApi, contextHolder] = message.useMessage();
+
+  const dataWarehouses = useAppSelector((state) => state.warehouses.dataRender);
+
+  const { user } = React.useContext(UserContext);
+
+  const ability = useMemo(
+    () => defineAbilityFor(user.userRole),
+    [user.userRole],
+  );
+
+  useEffect(() => {
+    dispatch(getAllWarehouse({ data: data, search: search }));
+  }, [dispatch, data, search]);
+
+  const handleSubmitCreate = async (dataCreate: any) => {
+    try {
+      setIsLoading(true);
+      const res = await axios.post(
+        `${process.env.NEXT_PUBLIC_API_BACKEND_URL}/warehouses/create`,
+        dataCreate,
+        {
+          withCredentials: true,
+        },
+      );
+      dispatch(createWarehouse(res.data));
+      setIsLoading(false);
+      success('Thêm kho mới thành công.', messageApi);
+      setIsModalVisible(false);
+      form.resetFields();
+    } catch (error: any) {
+      errors(error.response.data.message, messageApi);
+      setIsLoading(false);
+      return;
+    }
+  };
+
+  const handleSubmitUpdate = async (dataCreate: any) => {
+    try {
+      setIsLoading(true);
+      const res = await axios.put(
+        `${process.env.NEXT_PUBLIC_API_BACKEND_URL}/warehouses/update`,
+        dataCreate,
+        {
+          withCredentials: true,
+        },
+      );
+      dispatch(updateWarehouse(res.data));
+      setIsLoading(false);
+      setIsEdit(false);
+      success('Cập nhật thành công.', messageApi);
+      setIsModalVisible(false);
+      form.resetFields();
+    } catch (error: any) {
+      errors(error.response.data.message, messageApi);
+      setIsLoading(false);
+      return;
+    }
+  };
+  const handleDeleteRow = async (record: any) => {
+    try {
+      console.log(record);
+      setIsLoading(true);
+      const res = await axios.put(
+        `${process.env.NEXT_PUBLIC_API_BACKEND_URL}/warehouses/delete`,
+        { id: record.id },
+        {
+          withCredentials: true,
+        },
+      );
+      dispatch(deleteWarehouse(record.id));
+      setIsLoading(false);
+      success('Xóa thành công.', messageApi);
+      setIsModalVisible(false);
+      form.resetFields();
+    } catch (error: any) {
+      errors(error.response.data.message, messageApi);
+      setIsLoading(false);
+      return;
+    }
+  };
 
   const columns = [
     {
-      title: 'SẢN PHẨM',
+      title: 'Tên kho',
       dataIndex: 'name',
-      render: (_: any, record: InventoryItem) => (
-        <div>
-          <strong>{record.name}</strong>
-          <div style={{ fontSize: 12, color: '#999' }}>{record.category}</div>
-        </div>
-      ),
     },
     {
-      title: 'MÃ KHO',
-      dataIndex: 'code',
-    },
-    {
-      title: 'SỐ LƯỢNG',
-      dataIndex: 'quantity',
-    },
-    {
-      title: 'VỊ TRÍ',
+      title: 'Vị trí',
       dataIndex: 'location',
     },
     {
-      title: 'TRẠNG THÁI',
-      dataIndex: 'status',
-      render: (status: InventoryItem['status']) => (
-        // <Tag color={statusColorMap[status]}>{status}</Tag>
-        <StatusTag
-          status={status}
-          colorMap={statusColorMap}
-          defaultColor="default"
-        />
-      ),
-    },
-    {
-      title: 'HÀNH ĐỘNG',
-      render: () => (
+      title: 'Hành động',
+      render: (_: any, record: any) => (
         <Space>
-          <Button icon={<EditOutlined />} />
-          <Dropdown
-            overlay={
-              <Menu>
-                <Menu.Item key="1">Xuất hàng</Menu.Item>
-                <Menu.Item key="2">Chuyển kho</Menu.Item>
-              </Menu>
-            }>
-            <Button icon={<MoreOutlined />} />
-          </Dropdown>
+          <Button
+            icon={<EyeOutlined />}
+            onClick={() => {
+              setDataDetail(record);
+              setIsOpen(true);
+            }}
+          />
+          <Can I="edit" a="warehouses" ability={ability}>
+            <Button
+              icon={<EditOutlined />}
+              onClick={() => {
+                setIsEdit(true);
+                form.setFieldsValue({
+                  id: record.id,
+                  name: record.name,
+                  location: record.location,
+                });
+                setIsModalVisible(true);
+              }}
+            />
+          </Can>
+          <Can I="edit" a="warehouses" ability={ability}>
+            <Popconfirm
+              title="Xoá kho này?"
+              onConfirm={() => handleDeleteRow(record)}>
+              <Button danger icon={<DeleteOutlined />} />
+            </Popconfirm>
+          </Can>
         </Space>
       ),
     },
@@ -128,58 +182,104 @@ export default function InventoryPage() {
 
   return (
     <div style={{ padding: 24 }}>
-      {/* Thống kê */}
-      <Row gutter={16} style={{ marginBottom: 24 }}>
-        {[
-          { label: 'Tổng tồn kho', value: '2.567 sản phẩm' },
-          { label: 'Giá trị nhập', value: '45.000 đô la' },
-          { label: 'Giá trị đã xuất', value: '18.250 đô la' },
-          { label: 'Sản phẩm hư hỏng', value: '5 mục' },
-        ].map((item, idx) => (
-          <Col span={6} key={idx}>
-            <Card>
-              <div style={{ fontWeight: 600 }}>{item.label}</div>
-              <div style={{ fontSize: 20 }}>{item.value}</div>
-            </Card>
-          </Col>
-        ))}
-      </Row>
+      {contextHolder}
 
-      {/* Bộ lọc */}
       <Space style={{ marginBottom: 16 }} wrap>
-        <Select placeholder="Chọn trạng thái" style={{ width: 150 }}>
-          <Option value="all">Tất cả</Option>
-          <Option value="stored">Đang lưu kho</Option>
-          <Option value="exported">Đã xuất</Option>
-          <Option value="damaged">Hư hỏng</Option>
-        </Select>
-        <Select placeholder="Chọn danh mục" style={{ width: 150 }}>
-          <Option value="all">Tất cả</Option>
-          <Option value="furniture">Nội thất</Option>
-          <Option value="electronics">Điện tử</Option>
-        </Select>
-        <Search placeholder="Tìm kiếm sản phẩm..." allowClear />
-        <Select defaultValue="10">
+        <Search
+          placeholder="Tìm kiếm kho hoặc vị trí"
+          allowClear
+          enterButton
+          onSearch={(value) => goToWithSearch(router, value, 1, 10)}
+        />
+        <Select
+          defaultValue="10"
+          onChange={(value) => {
+            const searchFilter = Array.isArray(search)
+              ? search[0]
+              : search ?? '';
+            goToWithSearch(router, searchFilter, 1, Number(value));
+          }}>
           <Option value="10">10</Option>
           <Option value="20">20</Option>
+          <Option value="50">50</Option>
         </Select>
         <Button icon={<DownloadOutlined />}>Xuất Excel</Button>
-        <Button type="primary" icon={<PlusOutlined />}>
-          Thêm kho
-        </Button>
+
+        <Can I="create" a="warehouses" ability={ability}>
+          <Button
+            type="primary"
+            icon={<PlusOutlined />}
+            onClick={() => setIsModalVisible(true)}>
+            Thêm kho
+          </Button>
+        </Can>
+
+        <Modal
+          title={`Thông tin chi tiết kho`}
+          open={isOpen}
+          onCancel={() => {
+            setIsOpen(false);
+          }}
+          footer={null}
+          width={400}>
+          <Detail data={dataDetail} type="warehouses" />
+        </Modal>
+
+        <Modal
+          title={`${isEdit ? 'Cập nhật' : 'Thêm mới'}`}
+          open={isModalVisible}
+          onCancel={() => {
+            setIsModalVisible(false);
+            form.resetFields();
+          }}
+          footer={null}
+          width={800}>
+          <WarehouseForm
+            onSuccess={() => {
+              setIsModalVisible(false);
+              setIsEdit(false);
+              form.resetFields();
+            }}
+            handleSubmitCreate={handleSubmitCreate}
+            handleSubmitUpdate={handleSubmitUpdate}
+            isEdit={isEdit}
+            isLoading={isLoading}
+            form={form}
+          />
+        </Modal>
       </Space>
 
-      {/* Bảng dữ liệu */}
       <Table
-        rowSelection={{
-          selectedRowKeys,
-          onChange: setSelectedRowKeys,
-        }}
         columns={columns}
-        dataSource={data}
-        pagination={{ pageSize: 10 }}
+        dataSource={dataWarehouses}
+        pagination={{
+          pageSize: Number(size) || 10,
+          current: Number(page) || 1,
+          showSizeChanger: false,
+          onChange: (page: number, pageSize: number) => {
+            const searchFilter = Array.isArray(search)
+              ? search[0]
+              : search ?? '';
+            const sizeFilter = Number(size) || 10;
+            goToWithSearch(router, searchFilter, page, sizeFilter);
+          },
+        }}
         rowKey="key"
       />
     </div>
   );
 }
+
+export const getServerSideProps: GetServerSideProps = async (
+  ctx: GetServerSidePropsContext,
+) => {
+  const res = await axios.get(
+    `${process.env.NEXT_PUBLIC_API_BACKEND_URL}/warehouses`,
+  );
+
+  return {
+    props: {
+      data: res.data,
+    },
+  };
+};

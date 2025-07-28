@@ -1,110 +1,463 @@
-import React from 'react';
-import { Table, Tag, Button, Select, Space, DatePicker } from 'antd';
-import { DownloadOutlined } from '@ant-design/icons';
+import React, { useEffect, useMemo, useState } from 'react';
+import {
+  Table,
+  Button,
+  Input,
+  Select,
+  Space,
+  Popconfirm,
+  Modal,
+  Form,
+  message,
+  DatePicker,
+} from 'antd';
+import {
+  CheckOutlined,
+  EditOutlined,
+  EyeOutlined,
+  LoadingOutlined,
+} from '@ant-design/icons';
+import { GetServerSideProps, GetServerSidePropsContext } from 'next';
+import axios from 'axios';
+import styles from '@/styles/role-permission/permission.module.css';
+import { useAppDispatch, useAppSelector } from '@/redux/hook';
+import { errors, success } from '@/components/success-error-info';
+import dayjs from 'dayjs';
+import { Employee } from '@/redux/slice/employee';
+import {
+  confirmSalary,
+  createSalary,
+  getAllSalary,
+  Salary,
+  updateSalary,
+} from '@/redux/slice/salary';
+import SalariesForm from '@/components/salary-form';
 import StatusTag from '@/components/status-tag';
+import { UserContext } from '@/context/userContext';
+import { defineAbilityFor } from '@/casl/ability';
+import { Can } from '@/casl/Can';
+import Detail from '@/components/detail-data';
+import { useRouter } from 'next/router';
+import { goToWithSearchAttendancesSalary } from '@/utils/router-helper';
 
 const { Option } = Select;
-const { MonthPicker } = DatePicker;
-
-interface SalaryRecord {
-  key: string;
-  name: string;
-  month: string;
-  baseSalary: number;
-  bonus: number;
-  deduction: number;
-  total: number;
-  status: 'Đã thanh toán' | 'Chưa thanh toán';
-}
-
-const data: SalaryRecord[] = [
-  {
-    key: '1',
-    name: 'Nguyễn Văn A',
-    month: '06/2025',
-    baseSalary: 15000000,
-    bonus: 1000000,
-    deduction: 500000,
-    total: 15500000,
-    status: 'Đã thanh toán',
-  },
-  {
-    key: '2',
-    name: 'Trần Thị B',
-    month: '06/2025',
-    baseSalary: 12000000,
-    bonus: 0,
-    deduction: 0,
-    total: 12000000,
-    status: 'Chưa thanh toán',
-  },
-];
 
 const statusColors = {
-  'Đã thanh toán': 'green',
-  'Chưa thanh toán': 'orange',
+  'Đã trả lương': 'green',
+  'Chưa trả lương': 'red',
 };
 
-export default function SalaryPage() {
+export default function SalariesPage({
+  data,
+  dataEmployees,
+}: {
+  data: Salary[];
+  dataEmployees: Employee[];
+}) {
+  const [isModalVisible, setIsModalVisible] = useState(false);
+  const [isLoading, setIsLoading] = useState(false);
+  const [isEdit, setIsEdit] = useState(false);
+  const [disabled, setDisabled] = useState(false);
+  const [dataDetail, setDataDetail] = useState({});
+  const [isOpen, setIsOpen] = useState(false);
+  const router = useRouter();
+  const { search, page, size, date, status } = router.query;
+  const searchFilter = Array.isArray(search) ? search[0] : search ?? '';
+  const statusFilter = Array.isArray(status) ? status[0] : status ?? '';
+  const dateFilter = Array.isArray(date) ? date[0] : date ?? '';
+  const dispatch = useAppDispatch();
+  const [form] = Form.useForm();
+
+  const [messageApi, contextHolder] = message.useMessage();
+
+  const dataAttendances = useAppSelector((state) => state.salaries.dataRender);
+
+  const { user } = React.useContext(UserContext);
+
+  const ability = useMemo(
+    () => defineAbilityFor(user.userRole),
+    [user.userRole],
+  );
+
+  useEffect(() => {
+    dispatch(
+      getAllSalary({
+        data: data,
+        search: search,
+        date: dateFilter,
+        status: statusFilter,
+      }),
+    );
+  }, [dispatch, data, search, dateFilter, statusFilter]);
+
+  const handleSubmitCreate = async (dataCreate: any) => {
+    try {
+      setIsLoading(true);
+      const res = await axios.post(
+        `${process.env.NEXT_PUBLIC_API_BACKEND_URL}/salaries/create`,
+        dataCreate,
+        {
+          withCredentials: true,
+        },
+      );
+      dispatch(createSalary(res.data));
+      setIsLoading(false);
+      success('Thêm mới thành công.', messageApi);
+      setIsModalVisible(false);
+      setDisabled(false);
+      form.resetFields();
+      setIsEdit(false);
+    } catch (error: any) {
+      errors(error.response.data.message, messageApi);
+      setIsLoading(false);
+      return;
+    }
+  };
+
+  const handleSubmitUpdate = async (dataCreate: any) => {
+    try {
+      setIsLoading(true);
+      const res = await axios.put(
+        `${process.env.NEXT_PUBLIC_API_BACKEND_URL}/salaries/update`,
+        dataCreate,
+        {
+          withCredentials: true,
+        },
+      );
+      dispatch(updateSalary(res.data));
+      setIsLoading(false);
+      setDisabled(false);
+      setIsEdit(false);
+      success('Cập nhật thành công.', messageApi);
+      setIsModalVisible(false);
+      form.resetFields();
+    } catch (error: any) {
+      errors(error.response.data.message, messageApi);
+      setIsLoading(false);
+      return;
+    }
+  };
+
+  const handleConfirm = async (record: any) => {
+    try {
+      setIsLoading(true);
+      const res = await axios.put(
+        `${process.env.NEXT_PUBLIC_API_BACKEND_URL}/salaries/confirm`,
+        { id: record.id },
+        {
+          withCredentials: true,
+        },
+      );
+      dispatch(confirmSalary(record.id));
+      setIsLoading(false);
+      success('Xác nhận thành công.', messageApi);
+      setIsModalVisible(false);
+      form.resetFields();
+    } catch (error: any) {
+      errors(error.response.data.message, messageApi);
+      setIsLoading(false);
+      return;
+    }
+  };
+
   const columns = [
     {
-      title: 'Họ tên',
-      dataIndex: 'name',
+      title: 'Tên nhân viên',
+      dataIndex: 'employee',
+      render: (_: any, record: any) => {
+        return <span>{record.employee.full_name}</span>;
+      },
     },
     {
-      title: 'Tháng',
-      dataIndex: 'month',
+      title: 'Kỳ lương',
+      dataIndex: 'month_salary',
+      render: (_: any, record: any) => {
+        return <span>{dayjs(record.salary_month).format('MM/YYYY')}</span>;
+      },
     },
     {
       title: 'Lương cơ bản',
-      dataIndex: 'baseSalary',
-      render: (value: number) => value.toLocaleString('vi-VN') + ' ₫',
+      dataIndex: 'base_salary',
+      render: (_: any, record: any) => {
+        return (
+          <span>
+            {new Intl.NumberFormat('vi-VN').format(record.base_salary)}
+          </span>
+        );
+      },
     },
     {
-      title: 'Thưởng',
+      title: 'Thưởng thêm',
       dataIndex: 'bonus',
-      render: (value: number) => value.toLocaleString('vi-VN') + ' ₫',
+      render: (_: any, record: any) => {
+        return (
+          <span>{new Intl.NumberFormat('vi-VN').format(record.bonus)}</span>
+        );
+      },
+    },
+    {
+      title: 'Trợ cấp',
+      dataIndex: 'allowance',
+      render: (_: any, record: any) => {
+        return (
+          <span>{new Intl.NumberFormat('vi-VN').format(record.allowance)}</span>
+        );
+      },
     },
     {
       title: 'Khấu trừ',
       dataIndex: 'deduction',
-      render: (value: number) => value.toLocaleString('vi-VN') + ' ₫',
+      render: (_: any, record: any) => {
+        return (
+          <span>{new Intl.NumberFormat('vi-VN').format(record.deduction)}</span>
+        );
+      },
     },
     {
       title: 'Tổng lương',
-      dataIndex: 'total',
-      render: (value: number) => (
-        <strong style={{ color: '#1677ff' }}>
-          {value.toLocaleString('vi-VN')} ₫
-        </strong>
-      ),
+      dataIndex: 'net_salary',
+      render: (_: any, record: any) => {
+        return (
+          <span
+            style={{
+              fontWeight: 700,
+              color: 'blue',
+            }}>
+            {new Intl.NumberFormat('vi-VN').format(record.net_salary)}
+          </span>
+        );
+      },
     },
     {
       title: 'Trạng thái',
       dataIndex: 'status',
-      render: (status: SalaryRecord['status']) => (
-        // <Tag color={statusColors[status]}>{status}</Tag>
-        <StatusTag
-          status={status}
-          colorMap={statusColors}
-          defaultColor="default"
-        />
+      render: (_: any, record: any) => {
+        return (
+          <StatusTag
+            status={record.status}
+            colorMap={statusColors}
+            defaultColor="green"
+          />
+        );
+      },
+    },
+    {
+      title: 'Ghi chú',
+      dataIndex: 'note',
+    },
+    {
+      title: 'Hành động',
+      key: 'actions',
+      render: (_: any, record: any) => (
+        <Space>
+          <Button
+            icon={<EyeOutlined />}
+            onClick={() => {
+              setDataDetail(record);
+              setIsOpen(true);
+            }}
+          />
+          <Can I="edit" a="salary" ability={ability}>
+            <Button
+              icon={<EditOutlined />}
+              onClick={() => {
+                setIsEdit(true);
+                setDisabled(record.check_in ? false : true);
+                form.setFieldsValue({
+                  employee_id: record.employee.id,
+                  salary_month: dayjs(record.salary_month + '-01'),
+                  base_salary: record.base_salary,
+                  bonus: record.bonus,
+                  allowance: record.allowance,
+                  deduction: record.deduction,
+                  note: record.note,
+                  id: record.id,
+                });
+                setIsModalVisible(true);
+              }}
+            />
+          </Can>
+          <Can I="edit" a="salary" ability={ability}>
+            {record.status !== 'Đã trả lương' && (
+              <Popconfirm
+                title="Xác nhận đã trả lương nhân sự này?"
+                onConfirm={() => handleConfirm(record)}>
+                <Button icon={<CheckOutlined />} />
+              </Popconfirm>
+            )}
+          </Can>
+        </Space>
       ),
     },
   ];
 
+  if (!dataAttendances) {
+    return (
+      <div className={styles.loading}>
+        <p>Vui lòng chờ...</p>
+        <LoadingOutlined />
+      </div>
+    );
+  }
+
   return (
     <div style={{ padding: 24 }}>
-      <Space wrap style={{ marginBottom: 16 }}>
-        <MonthPicker placeholder="Chọn tháng" />
-        <Select placeholder="Trạng thái" style={{ width: 150 }}>
-          <Option value="all">Tất cả</Option>
-          <Option value="paid">Đã thanh toán</Option>
-          <Option value="unpaid">Chưa thanh toán</Option>
+      {contextHolder}
+      <Space style={{ marginBottom: 16 }} wrap>
+        <span>Trình diễn</span>
+        <Select
+          defaultValue="10"
+          onChange={(value) => {
+            goToWithSearchAttendancesSalary(
+              router,
+              searchFilter,
+              1,
+              Number(value),
+              dateFilter,
+              statusFilter,
+            );
+          }}>
+          <Option value="10">10</Option>
+          <Option value="20">20</Option>
+          <Option value="50">50</Option>
         </Select>
-        <Button icon={<DownloadOutlined />}>Xuất bảng lương</Button>
+
+        <DatePicker
+          picker="month"
+          placeholder="Chọn kỳ lương"
+          onChange={(value) =>
+            goToWithSearchAttendancesSalary(
+              router,
+              searchFilter,
+              1,
+              Number(size),
+              dayjs(value).format('MM/YYYY'),
+              statusFilter,
+            )
+          }
+        />
+        <Select
+          allowClear
+          onChange={(value) =>
+            goToWithSearchAttendancesSalary(
+              router,
+              searchFilter,
+              1,
+              Number(size),
+              dateFilter,
+              value,
+            )
+          }
+          placeholder="Chọn trạng thái"
+          options={[
+            { value: 'all', label: 'Tất cả' },
+            { value: 'Đã trả lương', label: 'Đã trả lương' },
+            { value: 'Chưa trả lương', label: 'Chưa trả lương' },
+          ]}
+        />
+
+        <Input.Search
+          placeholder="Tìm kiếm tên nhân sự"
+          allowClear
+          enterButton
+          onSearch={(value) =>
+            goToWithSearchAttendancesSalary(
+              router,
+              value,
+              1,
+              10,
+              dateFilter,
+              statusFilter,
+            )
+          }
+        />
+
+        <Can I="create" a="salary" ability={ability}>
+          <Button type="primary" onClick={() => setIsModalVisible(true)}>
+            Thêm mới
+          </Button>
+        </Can>
+        <Modal
+          title={`Thông tin chi tiết lương`}
+          open={isOpen}
+          onCancel={() => {
+            setIsOpen(false);
+          }}
+          footer={null}
+          width={400}>
+          <Detail data={dataDetail} type="salary" />
+        </Modal>
+        <Modal
+          title={`${isEdit ? 'Cập nhật' : 'Thêm mới'}`}
+          open={isModalVisible}
+          onCancel={() => {
+            setIsModalVisible(false);
+            setIsEdit(false);
+            setDisabled(false);
+
+            form.resetFields();
+          }}
+          footer={null}
+          width={800}>
+          <SalariesForm
+            onSuccess={() => {
+              setIsModalVisible(false);
+              setIsEdit(false);
+              setDisabled(false);
+              form.resetFields();
+            }}
+            handleSubmitCreate={handleSubmitCreate}
+            handleSubmitUpdate={handleSubmitUpdate}
+            isEdit={isEdit}
+            isLoading={isLoading}
+            form={form}
+            dataEmployees={dataEmployees}
+            disabled={disabled}
+            setDisabled={setDisabled}
+          />
+        </Modal>
       </Space>
-      <Table columns={columns} dataSource={data} pagination={{ pageSize: 5 }} />
+      <Table
+        columns={columns}
+        dataSource={dataAttendances}
+        pagination={{
+          pageSize: Number(size) || 10,
+          current: Number(page) || 1,
+          showSizeChanger: false,
+          onChange: (page: number, pageSize: number) => {
+            const searchFilter = Array.isArray(search)
+              ? search[0]
+              : search ?? '';
+            const sizeFilter = Number(size) || 10;
+            goToWithSearchAttendancesSalary(
+              router,
+              searchFilter,
+              page,
+              sizeFilter,
+              dateFilter,
+              statusFilter,
+            );
+          },
+        }}
+        rowKey="key"
+      />
     </div>
   );
 }
+
+export const getServerSideProps: GetServerSideProps = async (
+  ctx: GetServerSidePropsContext,
+) => {
+  const res = await axios.get(
+    `${process.env.NEXT_PUBLIC_API_BACKEND_URL}/salaries`,
+  );
+  const resEmployees = await axios.get(
+    `${process.env.NEXT_PUBLIC_API_BACKEND_URL}/employees`,
+  );
+  return {
+    props: {
+      data: res.data,
+      dataEmployees: resEmployees.data,
+    },
+  };
+};

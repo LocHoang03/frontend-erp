@@ -1,15 +1,14 @@
-import React, { useState } from 'react';
+import React from 'react';
 import {
   Form,
   Input,
-  Checkbox,
-  Row,
-  Col,
   Button,
   Card,
   Typography,
-  Divider,
+  Select,
+  FormInstance,
 } from 'antd';
+import { Permission } from '@/redux/slice/permission';
 
 const { Title } = Typography;
 
@@ -18,88 +17,87 @@ interface Feature {
   label: string;
 }
 
-const features: Feature[] = [
-  { key: 'user', label: 'Quản lý người dùng' },
-  { key: 'content', label: 'Quản lý nội dung' },
-  { key: 'disputes', label: 'Xử lý tranh chấp' },
-  { key: 'database', label: 'Quản lý cơ sở dữ liệu' },
-  { key: 'finance', label: 'Quản lý tài chính' },
-  { key: 'report', label: 'Báo cáo' },
-  { key: 'api', label: 'Kiểm soát API' },
-  { key: 'repository', label: 'Quản lý kho mã' },
-  { key: 'payroll', label: 'Quản lý lương' },
-];
-
-const actions = ['Đọc', 'Viết', 'Tạo'];
-
 type PermissionState = Record<string, string[]>;
 
 interface RoleFormProps {
   onSuccess: () => void;
+  dataPermissions: Permission[];
+  form: FormInstance;
+  handleSubmitCreate: ({}: any) => void;
+  handleEdit: ({}: any) => void;
+  isLoading: boolean;
+  isEdit: boolean;
 }
 
-const RoleForm: React.FC<RoleFormProps> = ({ onSuccess }) => {
-  const [form] = Form.useForm();
-  const [permissions, setPermissions] = useState<PermissionState>({});
-
-  const handleChange = (featureKey: string, checkedValues: string[]) => {
-    setPermissions((prev) => ({
-      ...prev,
-      [featureKey]: checkedValues,
-    }));
-  };
-
-  const handleSelectAll = () => {
-    const all: PermissionState = {};
-    features.forEach((f) => (all[f.key] = actions));
-    setPermissions(all);
-  };
-
-  const handleSubmit = () => {
-    const roleName = form.getFieldValue('roleName');
-    console.log('📤 Submitted:', { roleName, permissions });
-    // TODO: Gửi API tạo role ở đây
-    onSuccess(); // ✅ Gọi callback sau khi thành công
+const RoleForm: React.FC<RoleFormProps> = ({
+  onSuccess,
+  dataPermissions,
+  handleSubmitCreate,
+  handleEdit,
+  isLoading,
+  isEdit,
+  form,
+}) => {
+  const handleSubmit = (values: any) => {
+    const valueEntry = Object.fromEntries(
+      Object.entries(values).filter(([_, v]) => v !== undefined),
+    );
+    if (!isEdit) handleSubmitCreate(valueEntry);
+    else handleEdit(valueEntry);
   };
 
   return (
     <Card style={{ maxWidth: 800, margin: '0 auto' }}>
       <Title level={3}>Thêm vai trò</Title>
       <Form layout="vertical" form={form} onFinish={handleSubmit}>
+        <Form.Item name="id" hidden>
+          <Input />
+        </Form.Item>
         <Form.Item
           label="Tên vai trò"
-          name="roleName"
+          name="name"
           rules={[{ required: true, message: 'Vui lòng nhập tên vai trò!' }]}>
           <Input placeholder="Nhập tên vai trò" />
         </Form.Item>
+        <Form.Item
+          label="Mô tả"
+          name="description"
+          rules={[{ required: true, message: 'Vui lòng nhập mô tả!' }]}>
+          <Input placeholder="Nhập mô tả" />
+        </Form.Item>
 
-        <Divider>Quyền vai trò</Divider>
-
-        <Row justify="space-between" style={{ marginBottom: 12 }}>
-          <Col>Quyền truy cập của quản trị viên</Col>
-          <Col>
-            <Checkbox
-              onChange={(e) => {
-                if (e.target.checked) handleSelectAll();
-                else setPermissions({});
-              }}>
-              Chọn tất cả
-            </Checkbox>
-          </Col>
-        </Row>
-
-        {features.map((feature) => (
-          <Row key={feature.key} style={{ marginBottom: 12 }}>
-            <Col span={8}>{feature.label}</Col>
-            <Col span={16} style={{ textAlign: 'right' }}>
-              <Checkbox.Group
-                options={actions}
-                value={permissions[feature.key]}
-                onChange={(vals) => handleChange(feature.key, vals as string[])}
-              />
-            </Col>
-          </Row>
-        ))}
+        <Form.Item
+          label={`Quyền được phép`}
+          name="permission_id"
+          rules={[
+            {
+              required: true,
+              message: `Vui lòng chọn các quyền được phép!`,
+            },
+          ]}>
+          <Select
+            allowClear
+            showSearch
+            mode="multiple"
+            placeholder="Chọn quyền"
+            filterOption={(input, option) =>
+              (option?.label as string)
+                .toLowerCase()
+                .includes(input.toLowerCase())
+            }
+            options={(
+              dataPermissions as {
+                id: number;
+                name: string;
+                description: string;
+              }[]
+            ).map((r) => ({
+              label: `${r.name} (${r.description})`,
+              value: r.id,
+            }))}
+            style={{ width: '100%' }}
+          />
+        </Form.Item>
 
         <Form.Item style={{ textAlign: 'center', marginTop: 40 }}>
           <Button htmlType="submit" type="primary">
@@ -109,7 +107,7 @@ const RoleForm: React.FC<RoleFormProps> = ({ onSuccess }) => {
             htmlType="reset"
             onClick={() => {
               form.resetFields();
-              setPermissions({});
+              onSuccess();
             }}>
             Hủy bỏ
           </Button>
